@@ -16,7 +16,9 @@ const MARKET_SLUGS = [
 
 async function getMarketBySlug(slug) {
   try {
-    const res = await axios.get(`https://gamma-api.polymarket.com/events?slug=${slug}`);
+    // Añadir timestamp para evitar caché y obtener datos frescos
+    const timestamp = Date.now();
+    const res = await axios.get(`https://gamma-api.polymarket.com/events?slug=${slug}&_t=${timestamp}`);
     const data = Array.isArray(res.data) ? res.data : res.data.data || [];
     return data.length > 0 ? data[0] : null;
   } catch (err) {
@@ -26,10 +28,16 @@ async function getMarketBySlug(slug) {
 }
 
 async function getPolymarkets() {
-  console.log("Buscando mercados Up or Down del 28 de noviembre en Polymarket...\n");
+  const now = new Date();
+  console.log(`Buscando mercados Up or Down del 28 de noviembre en Polymarket...`);
+  console.log(`Última actualización: ${now.toLocaleString()}\n`);
   
-  for (const slug of MARKET_SLUGS) {
-    const event = await getMarketBySlug(slug);
+  // Hacer todas las peticiones en paralelo para obtener datos más rápido
+  const results = await Promise.all(MARKET_SLUGS.map(slug => getMarketBySlug(slug)));
+  
+  for (let i = 0; i < MARKET_SLUGS.length; i++) {
+    const event = results[i];
+    const slug = MARKET_SLUGS[i];
     
     if (event) {
       console.log(`=== ${event.title} ===`);
