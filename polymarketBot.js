@@ -6,25 +6,45 @@ const client = new Client({
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages]
 });
 
-// Lista de slugs de los mercados diarios "Up or Down"
-const MARKET_SLUGS = [
-  "bitcoin-up-or-down-on-november-28",
-  "nvda-up-or-down-on-november-28-2025",
-  "amzn-up-or-down-on-november-28-2025",
-  "meta-up-or-down-on-november-28-2025",
-  "aapl-up-or-down-on-november-28-2025",
-  "spx-up-or-down-on-november-28-2025",
-  "ndx-up-or-down-on-november-28-2025",
-  "ethereum-up-or-down-on-november-28",
-  "solana-up-or-down-on-november-28",
-  "xrp-up-or-down-on-november-28"
+// Nombres de los meses en inglés
+const MONTH_NAMES = [
+  "january", "february", "march", "april", "may", "june",
+  "july", "august", "september", "october", "november", "december"
 ];
 
-// Umbral de probabilidad para enviar alerta (80%)
+// Función para generar los slugs dinámicamente según la fecha actual
+function generateMarketSlugs() {
+  const today = new Date();
+  const month = MONTH_NAMES[today.getMonth()];
+  const day = today.getDate();
+  const year = today.getFullYear();
+
+  // Crypto markets: sin año en el slug
+  const cryptoSlugs = [
+    `bitcoin-up-or-down-on-${month}-${day}`,
+    `ethereum-up-or-down-on-${month}-${day}`,
+    `solana-up-or-down-on-${month}-${day}`,
+    `xrp-up-or-down-on-${month}-${day}`
+  ];
+
+  // Stock/Index markets: con año en el slug
+  const stockSlugs = [
+    `nvda-up-or-down-on-${month}-${day}-${year}`,
+    `amzn-up-or-down-on-${month}-${day}-${year}`,
+    `meta-up-or-down-on-${month}-${day}-${year}`,
+    `aapl-up-or-down-on-${month}-${day}-${year}`,
+    `spx-up-or-down-on-${month}-${day}-${year}`,
+    `ndx-up-or-down-on-${month}-${day}-${year}`
+  ];
+
+  return [...cryptoSlugs, ...stockSlugs];
+}
+
+// Umbral de probabilidad para enviar alerta (85%)
 const THRESHOLD = 0.85;
 
 // Tiempo antes del cierre para enviar alerta (2 horas en milisegundos)
-const TIME_BEFORE_CLOSE_MS = 2 * 60 * 60 * 1000;
+const TIME_BEFORE_CLOSE_MS = 4 * 60 * 60 * 1000;
 
 // ID del canal de Discord donde enviar los mensajes
 const CHANNEL_ID = process.env.CHANNEL_ID;
@@ -78,7 +98,9 @@ function getTimeRemaining(endDate) {
 }
 
 async function checkMarketsAndNotify() {
-  console.log(`[${new Date().toLocaleString()}] Verificando mercados...`);
+  const MARKET_SLUGS = generateMarketSlugs();
+  console.log(`[${new Date().toLocaleString()}] Verificando mercados para hoy...`);
+  console.log(`Slugs generados: ${MARKET_SLUGS[0].split('-on-')[1]}`);
 
   const channel = client.channels.cache.get(CHANNEL_ID);
   if (!channel) {
