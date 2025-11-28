@@ -1,8 +1,9 @@
 {
   "name": "polymarketbot",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "polymarketBot.js",
   "scripts": {
+    "start": "node polymarketBot.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
