@@ -1,9 +1,12 @@
 require("dotenv").config({ path: ".env" });
-const { Client, GatewayIntentBits, EmbedBuilder } = require("discord.js");
+const { Client, GatewayIntentBits, EmbedBuilder, PresenceUpdateStatus } = require("discord.js");
 const axios = require("axios");
 
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages]
+  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages],
+  presence: {
+    status: "invisible"
+  }
 });
 
 // Nombres de los meses en inglés
