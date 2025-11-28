@@ -33,6 +33,7 @@ function generateMarketSlugs() {
     `amzn-up-or-down-on-${month}-${day}-${year}`,
     `meta-up-or-down-on-${month}-${day}-${year}`,
     `aapl-up-or-down-on-${month}-${day}-${year}`,
+    `tsla-up-or-down-on-${month}-${day}-${year}`,
     `spx-up-or-down-on-${month}-${day}-${year}`,
     `ndx-up-or-down-on-${month}-${day}-${year}`
   ];
@@ -49,8 +50,9 @@ const TIME_BEFORE_CLOSE_MS = 4 * 60 * 60 * 1000;
 // ID del canal de Discord donde enviar los mensajes
 const CHANNEL_ID = process.env.CHANNEL_ID;
 
-// Set para trackear qué mercados ya enviaron alerta (evitar duplicados)
-const alertedMarkets = new Set();
+// Map para trackear los porcentajes anteriores de cada mercado
+// Formato: { slug: { option: "Up", percent: 85.0 } }
+const lastMarketData = new Map();
 
 async function getMarketBySlug(slug) {
   try {
@@ -132,22 +134,32 @@ async function checkMarketsAndNotify() {
       continue;
     }
 
-    // Si ya enviamos alerta para este mercado, saltar
-    if (alertedMarkets.has(slug)) {
-      console.log(`📨 ${event.title} - Ya alertado anteriormente`);
-      continue;
-    }
-
     // Buscar si alguna opción supera el umbral
     for (let j = 0; j < outcomePrices.length; j++) {
       if (outcomePrices[j] >= THRESHOLD) {
         const percent = (outcomePrices[j] * 100).toFixed(1);
         const option = outcomes[j] || "Desconocido";
 
+        // Verificar si los datos han cambiado respecto al último envío
+        const lastData = lastMarketData.get(slug);
+        const currentData = { option, percent: parseFloat(percent) };
+        
+        // Si ya enviamos este mercado con los mismos datos, saltar
+        if (lastData && lastData.option === currentData.option && lastData.percent === currentData.percent) {
+          console.log(`📨 ${event.title} - Sin cambios (${option} ${percent}%)`);
+          break;
+        }
+
+        // Determinar si es actualización o primera alerta
+        const isUpdate = lastData !== undefined;
+        const changeText = isUpdate 
+          ? `\n📈 **Cambio:** ${lastData.option} ${lastData.percent}% → ${option} ${percent}%`
+          : "";
+
         const embed = new EmbedBuilder()
           .setColor(option === "Up" ? 0x00ff00 : 0xff0000)
-          .setTitle(`🎯 ${event.title}`)
-          .setDescription(`La opción **${option}** tiene una probabilidad del **${percent}%**\n⏰ **Cierra en ${timeRemaining.text}**`)
+          .setTitle(`${isUpdate ? "🔄" : "🎯"} ${event.title}`)
+          .setDescription(`La opción **${option}** tiene una probabilidad del **${percent}%**\n⏰ **Cierra en ${timeRemaining.text}**${changeText}`)
           .addFields(
             { name: "📊 Opciones", value: outcomes.map((o, idx) => `${o}: ${(outcomePrices[idx] * 100).toFixed(1)}%`).join("\n"), inline: true },
             { name: "💰 Volumen", value: `$${parseFloat(market.volume || 0).toLocaleString("en-US", { maximumFractionDigits: 0 })}`, inline: true },
@@ -157,8 +169,8 @@ async function checkMarketsAndNotify() {
           .setTimestamp();
 
         await channel.send({ embeds: [embed] });
-        alertedMarkets.add(slug); // Marcar como alertado
-        console.log(`✅ Alerta enviada: ${event.title} - ${option} ${percent}% (cierra en ${timeRemaining.text})`);
+        lastMarketData.set(slug, currentData); // Guardar datos actuales
+        console.log(`✅ ${isUpdate ? "Actualización" : "Alerta"} enviada: ${event.title} - ${option} ${percent}% (cierra en ${timeRemaining.text})`);
         break; // Solo enviar una alerta por mercado
       }
     }
