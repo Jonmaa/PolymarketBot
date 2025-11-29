@@ -124,38 +124,99 @@ async function displayMarkets(slugs, category) {
     const slug = slugs[i];
     
     if (event && event.markets && event.markets.length > 0) {
-      const market = event.markets[0];
-      
-      // Parsear outcomes y precios
-      let outcomes = market.outcomes;
-      if (typeof outcomes === "string") {
-        try { outcomes = JSON.parse(outcomes); } catch (e) { outcomes = []; }
-      }
-      
-      let outcomePrices = [];
-      if (Array.isArray(market.outcomePrices)) {
-        outcomePrices = market.outcomePrices.map(p => parseFloat(p));
-      } else if (typeof market.outcomePrices === "string") {
-        try { outcomePrices = JSON.parse(market.outcomePrices).map(p => parseFloat(p)); } catch (e) {}
-      }
+      // Detectar tipo de mercado
+      const isCompanyMarket = slug.includes("largest-company");
+      const isCryptoPriceMarket = slug.includes("what-price-will");
+      const isMultiMarket = (category === "weekly" || category === "monthly") && event.markets.length > 1;
       
       // Calcular tiempo restante
+      const market = event.markets[0];
       const timeRemaining = getTimeRemaining(market.endDate);
       
       // Mostrar info del mercado
       console.log(`\n📊 ${event.title}`);
       console.log(`   ⏰ Estado: ${timeRemaining.expired ? "❌ Cerrado" : `⏳ Cierra en ${timeRemaining.text}`}`);
       
-      // Mostrar opciones con formato visual
-      outcomes.forEach((option, idx) => {
-        const percent = (outcomePrices[idx] * 100).toFixed(1);
-        const price = outcomePrices[idx].toFixed(2);
-        const bar = "█".repeat(Math.round(outcomePrices[idx] * 20)) + "░".repeat(20 - Math.round(outcomePrices[idx] * 20));
-        const emoji = option === "Up" ? "🟢" : "🔴";
-        console.log(`   ${emoji} ${option.padEnd(5)}: ${bar} ${percent.padStart(5)}% ($${price})`);
-      });
-      
-      console.log(`   💰 Volumen: $${parseFloat(market.volume || 0).toLocaleString("en-US", { maximumFractionDigits: 0 })}`);
+      if (isMultiMarket) {
+        // Procesar mercados con múltiples sub-opciones
+        const allOptions = [];
+        let totalVolume = 0;
+        
+        for (const m of event.markets) {
+          let outcomes = m.outcomes;
+          if (typeof outcomes === "string") {
+            try { outcomes = JSON.parse(outcomes); } catch (e) { outcomes = []; }
+          }
+          
+          let outcomePrices = [];
+          if (Array.isArray(m.outcomePrices)) {
+            outcomePrices = m.outcomePrices.map(p => parseFloat(p));
+          } else if (typeof m.outcomePrices === "string") {
+            try { outcomePrices = JSON.parse(m.outcomePrices).map(p => parseFloat(p)); } catch (e) {}
+          }
+          
+          const yesIndex = outcomes.indexOf("Yes");
+          if (yesIndex !== -1 && outcomePrices[yesIndex] > 0.01) {
+            let label;
+            
+            if (isCompanyMarket) {
+              const companyMatch = m.question.match(/Will (.+?) be the/);
+              label = companyMatch ? companyMatch[1] : "Unknown";
+            } else if (isCryptoPriceMarket) {
+              const priceMatch = m.question.match(/\$[\d,]+(?:\.\d+)?/);
+              const actionMatch = m.question.match(/(reach|dip to)/i);
+              const action = actionMatch ? (actionMatch[1].toLowerCase() === "reach" ? "📈" : "📉") : "";
+              label = priceMatch ? `${action} ${priceMatch[0]}` : "?";
+            } else {
+              const rangeMatch = m.question.match(/(\d+[-+]?\d*)/);
+              label = rangeMatch ? rangeMatch[0] : "?";
+            }
+            
+            allOptions.push({
+              label: label,
+              percent: outcomePrices[yesIndex] * 100,
+              volume: parseFloat(m.volume || 0)
+            });
+          }
+          totalVolume += parseFloat(m.volume || 0);
+        }
+        
+        // Ordenar por probabilidad descendente
+        allOptions.sort((a, b) => b.percent - a.percent);
+        
+        // Mostrar todas las opciones con >1%
+        allOptions.forEach(o => {
+          const bar = "█".repeat(Math.round(o.percent / 5)) + "░".repeat(20 - Math.round(o.percent / 5));
+          console.log(`   🔹 ${o.label.padEnd(20)}: ${bar} ${o.percent.toFixed(1).padStart(5)}%`);
+        });
+        
+        console.log(`   💰 Volumen Total: $${totalVolume.toLocaleString("en-US", { maximumFractionDigits: 0 })}`);
+        
+      } else {
+        // Mercado simple (Up/Down)
+        let outcomes = market.outcomes;
+        if (typeof outcomes === "string") {
+          try { outcomes = JSON.parse(outcomes); } catch (e) { outcomes = []; }
+        }
+        
+        let outcomePrices = [];
+        if (Array.isArray(market.outcomePrices)) {
+          outcomePrices = market.outcomePrices.map(p => parseFloat(p));
+        } else if (typeof market.outcomePrices === "string") {
+          try { outcomePrices = JSON.parse(market.outcomePrices).map(p => parseFloat(p)); } catch (e) {}
+        }
+        
+        // Mostrar opciones con formato visual
+        outcomes.forEach((option, idx) => {
+          const percent = (outcomePrices[idx] * 100).toFixed(1);
+          const price = outcomePrices[idx].toFixed(2);
+          const bar = "█".repeat(Math.round(outcomePrices[idx] * 20)) + "░".repeat(20 - Math.round(outcomePrices[idx] * 20));
+          const emoji = option === "Up" ? "🟢" : "🔴";
+          console.log(`   ${emoji} ${option.padEnd(5)}: ${bar} ${percent.padStart(5)}% ($${price})`);
+        });
+        
+        console.log(`   💰 Volumen: $${parseFloat(market.volume || 0).toLocaleString("en-US", { maximumFractionDigits: 0 })}`);
+      }
     } else {
       console.log(`\n❌ ${slug} - No encontrado`);
     }
