@@ -36,6 +36,17 @@ function generateMarketSlugs() {
     `highest-temperature-in-nyc-on-${month}-${day}`
   ];
 
+  // Monthly markets: mercados mensuales
+  const monthlySlugs = [
+    `what-price-will-bitcoin-hit-in-${month}-${year}`,
+    `what-price-will-ethereum-hit-in-${month}-${year}`,
+    `what-price-will-solana-hit-in-${month}-${year}`,
+    `what-price-will-xrp-hit-in-${month}-${year}`,
+    `largest-company-end-of-${month}`,
+    `2nd-largest-company-end-of-${month}`,
+    `3rd-largest-company-end-of-${month}`
+  ];
+
   // Stock/Index markets: con año en el slug
   const stockSlugs = [
     `nvda-up-or-down-on-${month}-${day}-${year}`,
@@ -47,7 +58,7 @@ function generateMarketSlugs() {
     `ndx-up-or-down-on-${month}-${day}-${year}`
   ];
 
-  return [...cryptoSlugs, ...weatherSlugs, ...stockSlugs];
+  return [...cryptoSlugs, ...weatherSlugs, ...monthlySlugs, ...stockSlugs];
 }
 
 // Umbral de probabilidad para enviar alerta (85%)

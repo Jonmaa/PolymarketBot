@@ -13,7 +13,7 @@ function generateMarketSlugs() {
   const day = today.getDate();
   const year = today.getFullYear();
 
-  // Crypto markets: sin año en el slug
+  // Daily - Crypto markets: sin año en el slug
   const cryptoSlugs = [
     `bitcoin-up-or-down-on-${month}-${day}`,
     `ethereum-up-or-down-on-${month}-${day}`,
@@ -21,13 +21,13 @@ function generateMarketSlugs() {
     `xrp-up-or-down-on-${month}-${day}`
   ];
 
-  // Weather markets: sin año en el slug
+  // Daily - Weather markets: sin año en el slug
   const weatherSlugs = [
     `highest-temperature-in-london-on-${month}-${day}`,
     `highest-temperature-in-nyc-on-${month}-${day}`
   ];
 
-  // Stock/Index markets: con año en el slug
+  // Daily - Stock/Index markets: con año en el slug
   const stockSlugs = [
     `nvda-up-or-down-on-${month}-${day}-${year}`,
     `amzn-up-or-down-on-${month}-${day}-${year}`,
@@ -38,7 +38,26 @@ function generateMarketSlugs() {
     `ndx-up-or-down-on-${month}-${day}-${year}`
   ];
 
-  return [...cryptoSlugs, ...weatherSlugs, ...stockSlugs];
+  // Weekly markets (placeholder para futuros mercados semanales)
+  const weeklySlugs = [];
+
+  // Monthly markets: mercados mensuales
+  const monthlySlugs = [
+    `what-price-will-bitcoin-hit-in-${month}-${year}`,
+    `what-price-will-ethereum-hit-in-${month}-${year}`,
+    `what-price-will-solana-hit-in-${month}-${year}`,
+    `what-price-will-xrp-hit-in-${month}-${year}`,
+    `largest-company-end-of-${month}`,
+    `2nd-largest-company-end-of-${month}`,
+    `3rd-largest-company-end-of-${month}`
+  ];
+
+  // Retornar con categorías
+  return {
+    daily: [...cryptoSlugs, ...weatherSlugs, ...stockSlugs],
+    weekly: weeklySlugs,
+    monthly: monthlySlugs
+  };
 }
 
 async function getMarketBySlug(slug) {
@@ -70,22 +89,14 @@ function getTimeRemaining(endDate) {
   };
 }
 
-async function getPolymarkets() {
-  const MARKET_SLUGS = generateMarketSlugs();
-  const now = new Date();
-  const month = MONTH_NAMES[now.getMonth()];
-  const day = now.getDate();
+async function displayMarkets(slugs, category) {
+  if (slugs.length === 0) return;
   
-  console.log(`\n🔍 Buscando mercados Up or Down para ${month} ${day}...`);
-  console.log(`📅 Última actualización: ${now.toLocaleString()}\n`);
-  console.log("=".repeat(60));
+  const results = await Promise.all(slugs.map(slug => getMarketBySlug(slug)));
   
-  // Hacer todas las peticiones en paralelo para obtener datos más rápido
-  const results = await Promise.all(MARKET_SLUGS.map(slug => getMarketBySlug(slug)));
-  
-  for (let i = 0; i < MARKET_SLUGS.length; i++) {
+  for (let i = 0; i < slugs.length; i++) {
     const event = results[i];
-    const slug = MARKET_SLUGS[i];
+    const slug = slugs[i];
     
     if (event && event.markets && event.markets.length > 0) {
       const market = event.markets[0];
@@ -124,6 +135,36 @@ async function getPolymarkets() {
       console.log(`\n❌ ${slug} - No encontrado`);
     }
   }
+}
+
+async function getPolymarkets() {
+  const markets = generateMarketSlugs();
+  const now = new Date();
+  const month = MONTH_NAMES[now.getMonth()];
+  const day = now.getDate();
+  
+  console.log(`\n🔍 Buscando mercados para ${month} ${day}...`);
+  console.log(`📅 Última actualización: ${now.toLocaleString()}`);
+  
+  // Daily Markets
+  console.log("\n" + "=".repeat(60));
+  console.log("📆 DAILY MARKETS");
+  console.log("=".repeat(60));
+  await displayMarkets(markets.daily, "daily");
+  
+  // Weekly Markets
+  if (markets.weekly.length > 0) {
+    console.log("\n" + "=".repeat(60));
+    console.log("📅 WEEKLY MARKETS");
+    console.log("=".repeat(60));
+    await displayMarkets(markets.weekly, "weekly");
+  }
+  
+  // Monthly Markets
+  console.log("\n" + "=".repeat(60));
+  console.log("🗓️  MONTHLY MARKETS");
+  console.log("=".repeat(60));
+  await displayMarkets(markets.monthly, "monthly");
   
   console.log("\n" + "=".repeat(60));
   console.log("✅ Búsqueda completada\n");
