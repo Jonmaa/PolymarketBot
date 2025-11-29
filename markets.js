@@ -38,8 +38,8 @@ function generateMarketSlugs() {
     `ndx-up-or-down-on-${month}-${day}-${year}`
   ];
 
-  // Weekly markets (placeholder para futuros mercados semanales)
-  const weeklySlugs = [];
+  // Weekly markets - Calcular semana actual (jueves a miércoles)
+  const weeklySlugs = generateWeeklySlugs(today);
 
   // Monthly markets: mercados mensuales
   const monthlySlugs = [
@@ -58,6 +58,31 @@ function generateMarketSlugs() {
     weekly: weeklySlugs,
     monthly: monthlySlugs
   };
+}
+
+// Función para generar slugs semanales (semanas de martes a lunes, 7 días)
+function generateWeeklySlugs(today) {
+  const slugs = [];
+  
+  // Encontrar el martes de esta semana (día 2)
+  const dayOfWeek = today.getDay(); // 0=domingo, 2=martes
+  const daysToTuesday = (dayOfWeek >= 2) ? dayOfWeek - 2 : dayOfWeek + 5;
+  
+  const weekStart = new Date(today);
+  weekStart.setDate(today.getDate() - daysToTuesday);
+  
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekStart.getDate() + 7);
+  
+  const startMonth = MONTH_NAMES[weekStart.getMonth()];
+  const startDay = weekStart.getDate();
+  const endMonth = MONTH_NAMES[weekEnd.getMonth()];
+  const endDay = weekEnd.getDate();
+  
+  // Elon Musk tweets weekly
+  slugs.push(`elon-musk-of-tweets-${startMonth}-${startDay}-${endMonth}-${endDay}`);
+  
+  return slugs;
 }
 
 async function getMarketBySlug(slug) {

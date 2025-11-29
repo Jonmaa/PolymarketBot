@@ -22,7 +22,7 @@ function generateMarketSlugs() {
   const day = today.getDate();
   const year = today.getFullYear();
 
-  // Crypto markets: sin año en el slug
+  // Daily - Crypto markets: sin año en el slug
   const cryptoSlugs = [
     `bitcoin-up-or-down-on-${month}-${day}`,
     `ethereum-up-or-down-on-${month}-${day}`,
@@ -30,11 +30,25 @@ function generateMarketSlugs() {
     `xrp-up-or-down-on-${month}-${day}`
   ];
 
-  // Weather markets: sin año en el slug
+  // Daily - Weather markets: sin año en el slug
   const weatherSlugs = [
     `highest-temperature-in-london-on-${month}-${day}`,
     `highest-temperature-in-nyc-on-${month}-${day}`
   ];
+
+  // Daily - Stock/Index markets: con año en el slug
+  const stockSlugs = [
+    `nvda-up-or-down-on-${month}-${day}-${year}`,
+    `amzn-up-or-down-on-${month}-${day}-${year}`,
+    `meta-up-or-down-on-${month}-${day}-${year}`,
+    `aapl-up-or-down-on-${month}-${day}-${year}`,
+    `tsla-up-or-down-on-${month}-${day}-${year}`,
+    `spx-up-or-down-on-${month}-${day}-${year}`,
+    `ndx-up-or-down-on-${month}-${day}-${year}`
+  ];
+
+  // Weekly markets
+  const weeklySlugs = generateWeeklySlugs(today);
 
   // Monthly markets: mercados mensuales
   const monthlySlugs = [
@@ -47,18 +61,32 @@ function generateMarketSlugs() {
     `3rd-largest-company-end-of-${month}`
   ];
 
-  // Stock/Index markets: con año en el slug
-  const stockSlugs = [
-    `nvda-up-or-down-on-${month}-${day}-${year}`,
-    `amzn-up-or-down-on-${month}-${day}-${year}`,
-    `meta-up-or-down-on-${month}-${day}-${year}`,
-    `aapl-up-or-down-on-${month}-${day}-${year}`,
-    `tsla-up-or-down-on-${month}-${day}-${year}`,
-    `spx-up-or-down-on-${month}-${day}-${year}`,
-    `ndx-up-or-down-on-${month}-${day}-${year}`
-  ];
+  return [...cryptoSlugs, ...weatherSlugs, ...weeklySlugs, ...monthlySlugs, ...stockSlugs];
+}
 
-  return [...cryptoSlugs, ...weatherSlugs, ...monthlySlugs, ...stockSlugs];
+// Función para generar slugs semanales (semanas de martes a lunes, 7 días)
+function generateWeeklySlugs(today) {
+  const slugs = [];
+  
+  // Encontrar el martes de esta semana (día 2)
+  const dayOfWeek = today.getDay(); // 0=domingo, 2=martes
+  const daysToTuesday = (dayOfWeek >= 2) ? dayOfWeek - 2 : dayOfWeek + 5;
+  
+  const weekStart = new Date(today);
+  weekStart.setDate(today.getDate() - daysToTuesday);
+  
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekStart.getDate() + 7);
+  
+  const startMonth = MONTH_NAMES[weekStart.getMonth()];
+  const startDay = weekStart.getDate();
+  const endMonth = MONTH_NAMES[weekEnd.getMonth()];
+  const endDay = weekEnd.getDate();
+  
+  // Elon Musk tweets weekly
+  slugs.push(`elon-musk-of-tweets-${startMonth}-${startDay}-${endMonth}-${endDay}`);
+  
+  return slugs;
 }
 
 // Umbral de probabilidad para enviar alerta (85%)
