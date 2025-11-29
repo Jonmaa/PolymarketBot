@@ -168,9 +168,9 @@ async function checkMarketsAndNotify() {
 
   // Procesar cada categoría con su canal correspondiente
   const categories = [
-    { slugs: markets.daily, channel: dailyChannel, name: "DAILY" },
-    { slugs: markets.weekly, channel: weeklyChannel, name: "WEEKLY" },
-    { slugs: markets.monthly, channel: monthlyChannel, name: "MONTHLY" }
+    { slugs: markets.daily, channel: dailyChannel, name: "DAILY", multiMarket: false },
+    { slugs: markets.weekly, channel: weeklyChannel, name: "WEEKLY", multiMarket: true },
+    { slugs: markets.monthly, channel: monthlyChannel, name: "MONTHLY", multiMarket: true }
   ];
 
   for (const category of categories) {
@@ -183,6 +183,12 @@ async function checkMarketsAndNotify() {
       const slug = category.slugs[i];
       const event = results[i];
       if (!event || !event.markets || event.markets.length === 0) continue;
+
+      // Para mercados con múltiples opciones (weekly/monthly), procesar diferente
+      if (category.multiMarket && event.markets.length > 1) {
+        await processMultiMarket(event, slug, category);
+        continue;
+      }
 
       const market = event.markets[0];
       const { outcomes, outcomePrices } = parseMarketData(market);
@@ -244,6 +250,73 @@ async function checkMarketsAndNotify() {
       }
     }
   }
+}
+
+// Procesar mercados con múltiples sub-mercados (ej: Elon Musk tweets)
+async function processMultiMarket(event, slug, category) {
+  const timeRemaining = getTimeRemaining(event.markets[0].endDate);
+  
+  if (timeRemaining.expired) {
+    console.log(`⏭️ ${event.title} - Ya cerrado`);
+    return;
+  }
+
+  // Extraer todas las opciones con sus probabilidades
+  const allOptions = [];
+  let totalVolume = 0;
+
+  for (const market of event.markets) {
+    const { outcomes, outcomePrices } = parseMarketData(market);
+    // Buscar la opción "Yes" y su probabilidad
+    const yesIndex = outcomes.indexOf("Yes");
+    if (yesIndex !== -1 && outcomePrices[yesIndex] > 0.001) {
+      // Extraer el rango del question (ej: "0-19", "20-39", etc.)
+      const rangeMatch = market.question.match(/(\d+[-+]?\d*)/);
+      const range = rangeMatch ? rangeMatch[0] : "?";
+      allOptions.push({
+        range: range,
+        percent: outcomePrices[yesIndex] * 100,
+        volume: parseFloat(market.volume || 0)
+      });
+    }
+    totalVolume += parseFloat(market.volume || 0);
+  }
+
+  // Ordenar por probabilidad descendente
+  allOptions.sort((a, b) => b.percent - a.percent);
+
+  // Crear el texto con todas las opciones (solo las que tienen >1%)
+  const significantOptions = allOptions.filter(o => o.percent >= 1);
+  const optionsText = significantOptions
+    .map(o => `**${o.range}**: ${o.percent.toFixed(1)}%`)
+    .join("\n");
+
+  // Calcular hash para detectar cambios
+  const currentHash = significantOptions.map(o => `${o.range}:${o.percent.toFixed(1)}`).join("|");
+  const lastHash = lastMarketData.get(slug + "_hash");
+
+  if (lastHash === currentHash) {
+    console.log(`📨 ${event.title} - Sin cambios`);
+    return;
+  }
+
+  const isUpdate = lastHash !== undefined;
+
+  const embed = new EmbedBuilder()
+    .setColor(0x1DA1F2) // Color Twitter/X
+    .setTitle(`${isUpdate ? "🔄" : "🎯"} ${event.title}`)
+    .setDescription(`⏰ **Cierra en ${timeRemaining.text}**`)
+    .addFields(
+      { name: "📊 Rangos más probables", value: optionsText || "Sin datos", inline: false },
+      { name: "💰 Volumen Total", value: `$${totalVolume.toLocaleString("en-US", { maximumFractionDigits: 0 })}`, inline: true },
+      { name: "📈 Opciones", value: `${event.markets.length} rangos`, inline: true }
+    )
+    .setURL(`https://polymarket.com/event/${event.slug}`)
+    .setTimestamp();
+
+  await category.channel.send({ embeds: [embed] });
+  lastMarketData.set(slug + "_hash", currentHash);
+  console.log(`✅ [${category.name}] ${isUpdate ? "Actualización" : "Alerta"} enviada: ${event.title}`);
 }
 
 client.once("ready", async () => {
