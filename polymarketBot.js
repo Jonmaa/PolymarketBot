@@ -61,7 +61,11 @@ function generateMarketSlugs() {
     `3rd-largest-company-end-of-${month}`
   ];
 
-  return [...cryptoSlugs, ...weatherSlugs, ...weeklySlugs, ...monthlySlugs, ...stockSlugs];
+  return {
+    daily: [...cryptoSlugs, ...weatherSlugs, ...stockSlugs],
+    weekly: weeklySlugs,
+    monthly: monthlySlugs
+  };
 }
 
 // Función para generar slugs semanales (semanas de martes a lunes, 7 días)
@@ -92,11 +96,13 @@ function generateWeeklySlugs(today) {
 // Umbral de probabilidad para enviar alerta (85%)
 const THRESHOLD = 0.85;
 
-// Tiempo antes del cierre para enviar alerta (2 horas en milisegundos)
+// Tiempo antes del cierre para enviar alerta (4 horas en milisegundos)
 const TIME_BEFORE_CLOSE_MS = 4 * 60 * 60 * 1000;
 
-// ID del canal de Discord donde enviar los mensajes
-const CHANNEL_ID = process.env.CHANNEL_ID;
+// IDs de los canales de Discord donde enviar los mensajes
+const DAILY_CHANNEL_ID = process.env.DAILY_CHANNEL_ID;
+const WEEKLY_CHANNEL_ID = process.env.WEEKLY_CHANNEL_ID;
+const MONTHLY_CHANNEL_ID = process.env.MONTLY_CHANNEL_ID;
 
 // Map para trackear los porcentajes anteriores de cada mercado
 // Formato: { slug: { option: "Up", percent: 85.0 } }
@@ -148,78 +154,93 @@ function getTimeRemaining(endDate) {
 }
 
 async function checkMarketsAndNotify() {
-  const MARKET_SLUGS = generateMarketSlugs();
+  const markets = generateMarketSlugs();
   console.log(`[${new Date().toLocaleString()}] Verificando mercados para hoy...`);
-  console.log(`Slugs generados: ${MARKET_SLUGS[0].split('-on-')[1]}`);
 
-  const channel = client.channels.cache.get(CHANNEL_ID);
-  if (!channel) {
-    console.error("No se encontró el canal. Verifica CHANNEL_ID en .env");
-    return;
-  }
+  // Verificar que los canales existen
+  const dailyChannel = client.channels.cache.get(DAILY_CHANNEL_ID);
+  const weeklyChannel = client.channels.cache.get(WEEKLY_CHANNEL_ID);
+  const monthlyChannel = client.channels.cache.get(MONTHLY_CHANNEL_ID);
 
-  const results = await Promise.all(MARKET_SLUGS.map(slug => getMarketBySlug(slug)));
+  if (!dailyChannel) console.error("No se encontró el canal DAILY. Verifica DAILY_CHANNEL_ID en .env");
+  if (!weeklyChannel) console.error("No se encontró el canal WEEKLY. Verifica WEEKLY_CHANNEL_ID en .env");
+  if (!monthlyChannel) console.error("No se encontró el canal MONTHLY. Verifica MONTLY_CHANNEL_ID en .env");
 
-  for (let i = 0; i < MARKET_SLUGS.length; i++) {
-    const slug = MARKET_SLUGS[i];
-    const event = results[i];
-    if (!event || !event.markets || event.markets.length === 0) continue;
+  // Procesar cada categoría con su canal correspondiente
+  const categories = [
+    { slugs: markets.daily, channel: dailyChannel, name: "DAILY" },
+    { slugs: markets.weekly, channel: weeklyChannel, name: "WEEKLY" },
+    { slugs: markets.monthly, channel: monthlyChannel, name: "MONTHLY" }
+  ];
 
-    const market = event.markets[0];
-    const { outcomes, outcomePrices } = parseMarketData(market);
-
-    // Verificar tiempo restante hasta el cierre
-    const timeRemaining = getTimeRemaining(market.endDate);
+  for (const category of categories) {
+    if (!category.channel || category.slugs.length === 0) continue;
     
-    // Si ya cerró o queda más de 2 horas, saltar
-    if (timeRemaining.expired) {
-      console.log(`⏭️ ${event.title} - Ya cerrado`);
-      continue;
-    }
-    
-    if (timeRemaining.ms > TIME_BEFORE_CLOSE_MS) {
-      console.log(`⏳ ${event.title} - Faltan ${timeRemaining.text} (esperando a <2h)`);
-      continue;
-    }
+    console.log(`\n📂 Procesando ${category.name}...`);
+    const results = await Promise.all(category.slugs.map(slug => getMarketBySlug(slug)));
 
-    // Buscar si alguna opción supera el umbral
-    for (let j = 0; j < outcomePrices.length; j++) {
-      if (outcomePrices[j] >= THRESHOLD) {
-        const percent = (outcomePrices[j] * 100).toFixed(1);
-        const option = outcomes[j] || "Desconocido";
+    for (let i = 0; i < category.slugs.length; i++) {
+      const slug = category.slugs[i];
+      const event = results[i];
+      if (!event || !event.markets || event.markets.length === 0) continue;
 
-        // Verificar si los datos han cambiado respecto al último envío
-        const lastData = lastMarketData.get(slug);
-        const currentData = { option, percent: parseFloat(percent) };
-        
-        // Si ya enviamos este mercado con los mismos datos, saltar
-        if (lastData && lastData.option === currentData.option && lastData.percent === currentData.percent) {
-          console.log(`📨 ${event.title} - Sin cambios (${option} ${percent}%)`);
-          break;
+      const market = event.markets[0];
+      const { outcomes, outcomePrices } = parseMarketData(market);
+
+      // Verificar tiempo restante hasta el cierre
+      const timeRemaining = getTimeRemaining(market.endDate);
+      
+      // Si ya cerró, saltar
+      if (timeRemaining.expired) {
+        console.log(`⏭️ ${event.title} - Ya cerrado`);
+        continue;
+      }
+      
+      // Para daily, verificar tiempo antes del cierre
+      if (category.name === "DAILY" && timeRemaining.ms > TIME_BEFORE_CLOSE_MS) {
+        console.log(`⏳ ${event.title} - Faltan ${timeRemaining.text} (esperando a <4h)`);
+        continue;
+      }
+
+      // Buscar si alguna opción supera el umbral
+      for (let j = 0; j < outcomePrices.length; j++) {
+        if (outcomePrices[j] >= THRESHOLD) {
+          const percent = (outcomePrices[j] * 100).toFixed(1);
+          const option = outcomes[j] || "Desconocido";
+
+          // Verificar si los datos han cambiado respecto al último envío
+          const lastData = lastMarketData.get(slug);
+          const currentData = { option, percent: parseFloat(percent) };
+          
+          // Si ya enviamos este mercado con los mismos datos, saltar
+          if (lastData && lastData.option === currentData.option && lastData.percent === currentData.percent) {
+            console.log(`📨 ${event.title} - Sin cambios (${option} ${percent}%)`);
+            break;
+          }
+
+          // Determinar si es actualización o primera alerta
+          const isUpdate = lastData !== undefined;
+          const changeText = isUpdate 
+            ? `\n📈 **Cambio:** ${lastData.option} ${lastData.percent}% → ${option} ${percent}%`
+            : "";
+
+          const embed = new EmbedBuilder()
+            .setColor(option === "Up" ? 0x00ff00 : 0xff0000)
+            .setTitle(`${isUpdate ? "🔄" : "🎯"} ${event.title}`)
+            .setDescription(`La opción **${option}** tiene una probabilidad del **${percent}%**\n⏰ **Cierra en ${timeRemaining.text}**${changeText}`)
+            .addFields(
+              { name: "📊 Opciones", value: outcomes.map((o, idx) => `${o}: ${(outcomePrices[idx] * 100).toFixed(1)}%`).join("\n"), inline: true },
+              { name: "💰 Volumen", value: `$${parseFloat(market.volume || 0).toLocaleString("en-US", { maximumFractionDigits: 0 })}`, inline: true },
+              { name: "⏰ Cierre", value: market.endDate ? new Date(market.endDate).toLocaleString() : "N/A", inline: true }
+            )
+            .setURL(`https://polymarket.com/event/${event.slug}`)
+            .setTimestamp();
+
+          await category.channel.send({ embeds: [embed] });
+          lastMarketData.set(slug, currentData); // Guardar datos actuales
+          console.log(`✅ [${category.name}] ${isUpdate ? "Actualización" : "Alerta"} enviada: ${event.title} - ${option} ${percent}%`);
+          break; // Solo enviar una alerta por mercado
         }
-
-        // Determinar si es actualización o primera alerta
-        const isUpdate = lastData !== undefined;
-        const changeText = isUpdate 
-          ? `\n📈 **Cambio:** ${lastData.option} ${lastData.percent}% → ${option} ${percent}%`
-          : "";
-
-        const embed = new EmbedBuilder()
-          .setColor(option === "Up" ? 0x00ff00 : 0xff0000)
-          .setTitle(`${isUpdate ? "🔄" : "🎯"} ${event.title}`)
-          .setDescription(`La opción **${option}** tiene una probabilidad del **${percent}%**\n⏰ **Cierra en ${timeRemaining.text}**${changeText}`)
-          .addFields(
-            { name: "📊 Opciones", value: outcomes.map((o, idx) => `${o}: ${(outcomePrices[idx] * 100).toFixed(1)}%`).join("\n"), inline: true },
-            { name: "💰 Volumen", value: `$${parseFloat(market.volume || 0).toLocaleString("en-US", { maximumFractionDigits: 0 })}`, inline: true },
-            { name: "⏰ Cierre", value: market.endDate ? new Date(market.endDate).toLocaleString() : "N/A", inline: true }
-          )
-          .setURL(`https://polymarket.com/event/${event.slug}`)
-          .setTimestamp();
-
-        await channel.send({ embeds: [embed] });
-        lastMarketData.set(slug, currentData); // Guardar datos actuales
-        console.log(`✅ ${isUpdate ? "Actualización" : "Alerta"} enviada: ${event.title} - ${option} ${percent}% (cierra en ${timeRemaining.text})`);
-        break; // Solo enviar una alerta por mercado
       }
     }
   }
