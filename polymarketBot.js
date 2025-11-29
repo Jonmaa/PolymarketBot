@@ -252,7 +252,7 @@ async function checkMarketsAndNotify() {
   }
 }
 
-// Procesar mercados con múltiples sub-mercados (ej: Elon Musk tweets)
+// Procesar mercados con múltiples sub-mercados (ej: Elon Musk tweets, largest companies)
 async function processMultiMarket(event, slug, category) {
   const timeRemaining = getTimeRemaining(event.markets[0].endDate);
   
@@ -260,6 +260,11 @@ async function processMultiMarket(event, slug, category) {
     console.log(`⏭️ ${event.title} - Ya cerrado`);
     return;
   }
+
+  // Detectar si es un mercado de compañías (largest company)
+  const isCompanyMarket = slug.includes("largest-company");
+  // Detectar si es un mercado de precios crypto (what-price-will)
+  const isCryptoPriceMarket = slug.includes("what-price-will");
 
   // Extraer todas las opciones con sus probabilidades
   const allOptions = [];
@@ -270,11 +275,26 @@ async function processMultiMarket(event, slug, category) {
     // Buscar la opción "Yes" y su probabilidad
     const yesIndex = outcomes.indexOf("Yes");
     if (yesIndex !== -1 && outcomePrices[yesIndex] > 0.001) {
-      // Extraer el rango del question (ej: "0-19", "20-39", etc.)
-      const rangeMatch = market.question.match(/(\d+[-+]?\d*)/);
-      const range = rangeMatch ? rangeMatch[0] : "?";
+      let label;
+      
+      if (isCompanyMarket) {
+        // Extraer nombre de la empresa del question (ej: "Will NVIDIA be the largest...")
+        const companyMatch = market.question.match(/Will (.+?) be the/);
+        label = companyMatch ? companyMatch[1] : "Unknown";
+      } else if (isCryptoPriceMarket) {
+        // Extraer precio completo del question (ej: "Will Bitcoin reach $150,000...")
+        const priceMatch = market.question.match(/\$[\d,]+(?:\.\d+)?/);
+        const actionMatch = market.question.match(/(reach|dip to)/i);
+        const action = actionMatch ? (actionMatch[1].toLowerCase() === "reach" ? "📈" : "📉") : "";
+        label = priceMatch ? `${action} ${priceMatch[0]}` : "?";
+      } else {
+        // Extraer el rango del question (ej: "0-19", "20-39", etc.)
+        const rangeMatch = market.question.match(/(\d+[-+]?\d*)/);
+        label = rangeMatch ? rangeMatch[0] : "?";
+      }
+      
       allOptions.push({
-        range: range,
+        label: label,
         percent: outcomePrices[yesIndex] * 100,
         volume: parseFloat(market.volume || 0)
       });
@@ -288,11 +308,11 @@ async function processMultiMarket(event, slug, category) {
   // Crear el texto con todas las opciones (solo las que tienen >1%)
   const significantOptions = allOptions.filter(o => o.percent >= 1);
   const optionsText = significantOptions
-    .map(o => `**${o.range}**: ${o.percent.toFixed(1)}%`)
+    .map(o => `**${o.label}**: ${o.percent.toFixed(1)}%`)
     .join("\n");
 
   // Calcular hash para detectar cambios
-  const currentHash = significantOptions.map(o => `${o.range}:${o.percent.toFixed(1)}`).join("|");
+  const currentHash = significantOptions.map(o => `${o.label}:${o.percent.toFixed(1)}`).join("|");
   const lastHash = lastMarketData.get(slug + "_hash");
 
   if (lastHash === currentHash) {
