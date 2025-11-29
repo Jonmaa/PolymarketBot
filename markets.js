@@ -21,6 +21,12 @@ function generateMarketSlugs() {
     `xrp-up-or-down-on-${month}-${day}`
   ];
 
+  // Weather markets: sin año en el slug
+  const weatherSlugs = [
+    `highest-temperature-in-london-on-${month}-${day}`,
+    `highest-temperature-in-nyc-on-${month}-${day}`
+  ];
+
   // Stock/Index markets: con año en el slug
   const stockSlugs = [
     `nvda-up-or-down-on-${month}-${day}-${year}`,
@@ -32,7 +38,7 @@ function generateMarketSlugs() {
     `ndx-up-or-down-on-${month}-${day}-${year}`
   ];
 
-  return [...cryptoSlugs, ...stockSlugs];
+  return [...cryptoSlugs, ...weatherSlugs, ...stockSlugs];
 }
 
 async function getMarketBySlug(slug) {
